@@ -1,0 +1,7 @@
+(library
+ (name slurm)
+ (public_name ocaml-slurm)
+ (modules slurm_rest)
+ (preprocess
+  (pps ppx_deriving_yojson))
+ (libraries lwt lwt.unix cohttp cohttp-lwt cohttp-lwt-unix yojson logs))

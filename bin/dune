@@ -1,0 +1,4 @@
+(executable
+ (public_name slurm-example)
+ (name main)
+ (libraries ocaml-slurm lwt lwt.unix logs fmt))
