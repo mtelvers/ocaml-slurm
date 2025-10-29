@@ -87,7 +87,8 @@ val cancel_job : config -> string -> (unit, [> `Msg of string ]) result Lwt.t
 (** Cancel a job *)
 
 val get_job_db : config -> string -> (job_info list, [> `Msg of string ]) result Lwt.t
-(** Get a specific job from slurmdb by job_id (includes completed/archived jobs). Returns a list (single element for regular jobs, multiple for array jobs or heterogeneous jobs). *)
+(** Get a specific job from slurmdb by job_id (includes completed/archived jobs). Returns a list (single element for regular jobs, multiple for array jobs or
+    heterogeneous jobs). *)
 
 val get_jobs_db : config -> ?users:string list -> unit -> (job_info list, [> `Msg of string ]) result Lwt.t
 (** Get jobs from slurmdb (includes completed/archived jobs). Filter by users if provided. *)

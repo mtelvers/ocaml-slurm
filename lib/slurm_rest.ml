@@ -425,7 +425,20 @@ let cancel_job config job_id =
 let parse_job_info_db json =
   try
     let open Yojson.Safe.Util in
-    let job_id = json |> member "job_id" |> to_int |> string_of_int in
+    (* Check if this is an array task and reconstruct job_id as parent_task format *)
+    let job_id =
+      try
+        let array_obj = json |> member "array" in
+        let array_job_id = array_obj |> member "job_id" |> to_int in
+        let task_id_obj = array_obj |> member "task_id" in
+        let task_is_set = task_id_obj |> member "set" |> to_bool in
+        if task_is_set then
+          let task_num = task_id_obj |> member "number" |> to_int in
+          Printf.sprintf "%d_%d" array_job_id task_num
+        else json |> member "job_id" |> to_int |> string_of_int
+      with
+      | _ -> json |> member "job_id" |> to_int |> string_of_int
+    in
     (* In slurmdb, job_state is nested: state.current is an array like ["NODE_FAIL"] *)
     let job_state = json |> member "state" |> member "current" |> to_list |> List.hd |> to_string in
     let name = json |> member "name" |> to_string in
