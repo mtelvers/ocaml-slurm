@@ -86,5 +86,5 @@ val get_jobs : config -> ?job_ids:string list -> unit -> (job_info list, [> `Msg
 val cancel_job : config -> string -> (unit, [> `Msg of string ]) result Lwt.t
 (** Cancel a job *)
 
-val get_jobs_db : config -> ?users:string list -> unit -> (job_info list, [> `Msg of string ]) result Lwt.t
-(** Get jobs from slurmdb (includes completed/archived jobs). Filter by users if provided. *)
+val get_jobs_db : config -> ?users:string list -> ?job_ids:string list -> unit -> (job_info list, [> `Msg of string ]) result Lwt.t
+(** Get jobs from slurmdb (includes completed/archived jobs). Filter by users and/or job_ids if provided. *)
