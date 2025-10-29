@@ -49,6 +49,13 @@ type job_info = {
 [@@deriving yojson]
 (** Job information returned by Slurm *)
 
+type number_object = {
+  number : int;
+  set : bool;
+  infinite : bool;
+}
+[@@deriving yojson]
+
 type job_object = {
   name : string;
   account : string option; [@yojson.option]
@@ -57,7 +64,7 @@ type job_object = {
   tasks : int option; [@yojson.option]
   cpus_per_task : int option; [@yojson.option]
   memory_per_node : int option; [@yojson.option]
-  time_limit : int option; [@yojson.option]
+  time_limit : number_object option; [@yojson.option]
   environment : string list option; [@yojson.option]
   constraints : string option; [@yojson.option]
   current_working_directory : string option; [@yojson.option]
@@ -258,6 +265,12 @@ let submit_job config spec =
   Log.info (fun f -> f "Submitting job: %s" spec.name);
   (* Convert environment from (string * string) list to string list *)
   let environment = if spec.environment = [] then None else Some (List.map (fun (k, v) -> k ^ "=" ^ v) spec.environment) in
+  (* Convert time_limit to number_object format *)
+  let time_limit =
+    match spec.time_limit with
+    | None -> None
+    | Some minutes -> Some { number = minutes; set = true; infinite = false }
+  in
   (* Build job submission request *)
   let request =
     {
@@ -271,7 +284,7 @@ let submit_job config spec =
           tasks = spec.tasks;
           cpus_per_task = spec.cpus_per_task;
           memory_per_node = spec.memory_mb;
-          time_limit = spec.time_limit;
+          time_limit;
           environment;
           constraints = spec.constraints;
           current_working_directory = spec.working_directory;
