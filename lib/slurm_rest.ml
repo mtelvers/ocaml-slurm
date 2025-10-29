@@ -171,9 +171,49 @@ let job_state_of_string = function
       OutOfMemory
   | other -> Unknown other
 
-(** Make HTTP request with authentication *)
+(** Make HTTP request with authentication to /slurm/ endpoints *)
 let make_request config ~meth ~path ~body =
   let uri = Uri.of_string (config.base_url ^ "/slurm/" ^ config.api_version ^ path) in
+  Log.debug (fun f -> f "%s %s" (Cohttp.Code.string_of_method meth) (Uri.to_string uri));
+  (* Build headers with authentication *)
+  let headers = Cohttp.Header.init () in
+  let headers = Cohttp.Header.add headers "Content-Type" "application/json" in
+  let headers = Cohttp.Header.add headers "Accept" "application/json" in
+  let headers =
+    match config.auth with
+    | JWT { token; username } ->
+        let headers = Cohttp.Header.add headers "X-SLURM-USER-NAME" username in
+        let headers = Cohttp.Header.add headers "X-SLURM-USER-TOKEN" token in
+        headers
+    | Unix_socket -> headers (* Unix socket uses local user credentials *)
+  in
+  let body =
+    match body with
+    | None -> Cohttp_lwt.Body.empty
+    | Some json -> Cohttp_lwt.Body.of_string (Yojson.Safe.to_string json)
+  in
+  Lwt.catch
+    (fun () ->
+      let* resp, resp_body =
+        match meth with
+        | `GET -> Cohttp_lwt_unix.Client.get ~headers uri
+        | `POST -> Cohttp_lwt_unix.Client.post ~headers ~body uri
+        | `DELETE -> Cohttp_lwt_unix.Client.delete ~headers uri
+        | _ -> Lwt.fail_with "Unsupported HTTP method"
+      in
+      let status = Cohttp.Response.status resp in
+      let* body_str = Cohttp_lwt.Body.to_string resp_body in
+      Log.debug (fun f -> f "Response status: %d" (Cohttp.Code.code_of_status status));
+      Log.debug (fun f -> f "Response body: %s" body_str);
+      if Cohttp.Code.is_success (Cohttp.Code.code_of_status status) then Lwt.return (Ok body_str)
+      else Lwt.return (Error (`Msg (Printf.sprintf "HTTP %d: %s" (Cohttp.Code.code_of_status status) body_str))))
+    (fun exn ->
+      Log.err (fun f -> f "Request failed: %s" (Printexc.to_string exn));
+      Lwt.return (Error (`Msg (Printexc.to_string exn))))
+
+(** Make HTTP request with authentication to /slurmdb/ endpoints *)
+let make_request_db config ~meth ~path ~body =
+  let uri = Uri.of_string (config.base_url ^ "/slurmdb/" ^ config.api_version ^ path) in
   Log.debug (fun f -> f "%s %s" (Cohttp.Code.string_of_method meth) (Uri.to_string uri));
   (* Build headers with authentication *)
   let headers = Cohttp.Header.init () in
@@ -368,3 +408,84 @@ let cancel_job config job_id =
   | Ok _ ->
       Log.info (fun f -> f "Job cancelled: %s" job_id);
       Lwt.return (Ok ())
+
+(** Parse job info from slurmdb JSON (different format than /slurm/ endpoint) *)
+let parse_job_info_db json =
+  try
+    let open Yojson.Safe.Util in
+    let job_id = json |> member "job_id" |> to_int |> string_of_int in
+    (* In slurmdb, job_state is nested: state.current is an array like ["NODE_FAIL"] *)
+    let job_state = json |> member "state" |> member "current" |> to_list |> List.hd |> to_string in
+    let name = json |> member "name" |> to_string in
+    let user = json |> member "user" |> to_string in
+    (* Exit code *)
+    let exit_code =
+      try
+        let obj = json |> member "exit_code" |> member "return_code" in
+        let is_set = obj |> member "set" |> to_bool in
+        if is_set then Some (obj |> member "number" |> to_int) else None
+      with
+      | _ -> None
+    in
+    (* Signal *)
+    let signal =
+      try
+        let obj = json |> member "exit_code" |> member "signal" |> member "id" in
+        let is_set = obj |> member "set" |> to_bool in
+        if is_set then Some (obj |> member "number" |> to_int) else None
+      with
+      | _ -> None
+    in
+    (* Timestamps *)
+    let submit_time =
+      try
+        let obj = json |> member "time" |> member "submission" in
+        let num = obj |> member "number" |> to_int in
+        Some (float_of_int num)
+      with
+      | _ -> None
+    in
+    let start_time =
+      try
+        let obj = json |> member "time" |> member "start" in
+        let num = obj |> member "number" |> to_int in
+        Some (float_of_int num)
+      with
+      | _ -> None
+    in
+    let end_time =
+      try
+        let obj = json |> member "time" |> member "end" in
+        let num = obj |> member "number" |> to_int in
+        Some (float_of_int num)
+      with
+      | _ -> None
+    in
+    Some { job_id; job_state; exit_code; signal; name; user_name = user; submit_time; start_time; end_time }
+  with
+  | exn ->
+      Log.warn (fun f -> f "Failed to parse slurmdb job info: %s" (Printexc.to_string exn));
+      None
+
+(** Get jobs from slurmdb (includes completed/archived jobs) *)
+let get_jobs_db config ?users () =
+  Log.debug (fun f -> f "Getting jobs from slurmdb");
+  let path =
+    match users with
+    | None -> "/jobs"
+    | Some user_list -> "/jobs?users=" ^ String.concat "," user_list
+  in
+  let* result = make_request_db config ~meth:`GET ~path ~body:None in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok body_str -> (
+      try
+        let json = Yojson.Safe.from_string body_str in
+        let open Yojson.Safe.Util in
+        let jobs = json |> member "jobs" |> to_list in
+        let job_infos = List.filter_map parse_job_info_db jobs in
+        Lwt.return (Ok job_infos)
+      with
+      | exn ->
+          Log.err (fun f -> f "Failed to parse slurmdb jobs response: %s" (Printexc.to_string exn));
+          Lwt.return (Error (`Msg ("Failed to parse slurmdb jobs response: " ^ body_str))))
