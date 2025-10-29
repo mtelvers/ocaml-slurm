@@ -479,24 +479,32 @@ let parse_job_info_db json =
       Log.warn (fun f -> f "Failed to parse slurmdb job info: %s" (Printexc.to_string exn));
       None
 
+(** Get a specific job from slurmdb by job_id *)
+let get_job_db config job_id =
+  Log.debug (fun f -> f "Getting job %s from slurmdb" job_id);
+  let path = "/job/" ^ job_id in
+  let* result = make_request_db config ~meth:`GET ~path ~body:None in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok body_str -> (
+      try
+        let json = Yojson.Safe.from_string body_str in
+        let open Yojson.Safe.Util in
+        let jobs = json |> member "jobs" |> to_list in
+        let job_infos = List.filter_map parse_job_info_db jobs in
+        Lwt.return (Ok job_infos)
+      with
+      | exn ->
+          Log.err (fun f -> f "Failed to parse slurmdb job response: %s" (Printexc.to_string exn));
+          Lwt.return (Error (`Msg ("Failed to parse slurmdb job response: " ^ body_str))))
+
 (** Get jobs from slurmdb (includes completed/archived jobs) *)
-let get_jobs_db config ?users ?job_ids () =
+let get_jobs_db config ?users () =
   Log.debug (fun f -> f "Getting jobs from slurmdb");
-  let params = [] in
-  let params =
-    match users with
-    | None -> params
-    | Some user_list -> ("users=" ^ String.concat "," user_list) :: params
-  in
-  let params =
-    match job_ids with
-    | None -> params
-    | Some id_list -> ("job_id=" ^ String.concat "," id_list) :: params
-  in
   let path =
-    match params with
-    | [] -> "/jobs"
-    | _ -> "/jobs?" ^ String.concat "&" (List.rev params)
+    match users with
+    | None -> "/jobs"
+    | Some user_list -> "/jobs?users=" ^ String.concat "," user_list
   in
   let* result = make_request_db config ~meth:`GET ~path ~body:None in
   match result with
