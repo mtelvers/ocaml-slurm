@@ -59,6 +59,7 @@ type job_submit = {
   working_directory : string option;
   stdout_path : string option;
   stderr_path : string option;
+  array : string option;  (** Array job specification (e.g., "0-4450") *)
 }
 (** Job submission specification *)
 

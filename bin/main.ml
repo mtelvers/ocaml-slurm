@@ -22,6 +22,7 @@ let make_job_spec ~name ~script ?constraints () : Slurm_rest.job_submit =
     working_directory = Some "/tmp";
     stdout_path = Some "/tmp/slurm-test-%j.out";
     stderr_path = None;
+    array = None;
   }
 
 (* Poll job status until terminal state, calling handler when done *)

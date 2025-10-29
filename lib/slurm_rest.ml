@@ -63,6 +63,7 @@ type job_object = {
   current_working_directory : string option; [@yojson.option]
   standard_output : string option; [@yojson.option]
   standard_error : string option; [@yojson.option]
+  array : string option; [@yojson.option]
 }
 [@@deriving yojson]
 (** Job object for submission *)
@@ -89,6 +90,7 @@ type job_submit = {
   working_directory : string option;
   stdout_path : string option;
   stderr_path : string option;
+  array : string option;
 }
 (** Job submission specification (user-facing) *)
 
@@ -275,6 +277,7 @@ let submit_job config spec =
           current_working_directory = spec.working_directory;
           standard_output = spec.stdout_path;
           standard_error = spec.stderr_path;
+          array = spec.array;
         };
     }
   in
