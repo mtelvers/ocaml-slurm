@@ -316,7 +316,20 @@ let submit_job config spec =
 let parse_job_info json =
   try
     let open Yojson.Safe.Util in
-    let job_id = json |> member "job_id" |> to_int |> string_of_int in
+    (* Check if this is an array task and reconstruct job_id as parent_task format *)
+    let job_id =
+      try
+        let array_obj = json |> member "array" in
+        let array_job_id = array_obj |> member "job_id" |> to_int in
+        let task_id_obj = array_obj |> member "task_id" in
+        let task_is_set = task_id_obj |> member "set" |> to_bool in
+        if task_is_set then
+          let task_num = task_id_obj |> member "number" |> to_int in
+          Printf.sprintf "%d_%d" array_job_id task_num
+        else json |> member "job_id" |> to_int |> string_of_int
+      with
+      | _ -> json |> member "job_id" |> to_int |> string_of_int
+    in
     (* job_state is an array like ["PENDING"] *)
     let job_state = json |> member "job_state" |> to_list |> List.hd |> to_string in
     let name = json |> member "name" |> to_string in
