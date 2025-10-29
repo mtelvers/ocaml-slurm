@@ -77,8 +77,8 @@ val job_state_of_string : string -> job_state
 val submit_job : config -> job_submit -> (string, [> `Msg of string ]) result Lwt.t
 (** Returns job ID on success *)
 
-val get_job : config -> string -> (job_info, [> `Msg of string ]) result Lwt.t
-(** Get job information *)
+val get_job : config -> string -> (job_info list, [> `Msg of string ]) result Lwt.t
+(** Get job information. Returns a list (single element for regular jobs, multiple for array jobs). *)
 
 val get_jobs : config -> ?job_ids:string list -> unit -> (job_info list, [> `Msg of string ]) result Lwt.t
 (** Get multiple jobs information *)

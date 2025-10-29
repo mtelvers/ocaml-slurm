@@ -38,28 +38,33 @@ let poll_job_until_done config job_id ~on_terminal_state =
       | Error (`Msg msg) ->
           let* () = Lwt_io.eprintf "Failed to get job status: %s\n" msg in
           exit 1
-      | Ok job_info -> (
-          let state = Slurm_rest.job_state_of_string job_info.job_state in
-          let* () = Lwt_io.printf "  State: %s\n" job_info.job_state in
-          let* () =
-            match job_info.exit_code with
-            | Some code -> Lwt_io.printf "  Exit code: %d\n" code
-            | None -> Lwt_io.printf "  Exit code: (not set)\n"
-          in
-          let* () =
-            match job_info.signal with
-            | Some sig_ -> Lwt_io.printf "  Signal: %d\n" sig_
-            | None -> Lwt_io.printf "  Signal: (not set)\n"
-          in
-          match state with
-          | Slurm_rest.Pending
-          | Slurm_rest.Running
-          | _
-            when state <> Slurm_rest.Completed && state <> Slurm_rest.Failed && state <> Slurm_rest.Cancelled && state <> Slurm_rest.Timeout ->
-              let* () = Lwt_io.printf "  (waiting...)\n\n" in
-              let* () = Lwt_unix.sleep 2.0 in
-              poll (count + 1)
-          | terminal_state -> on_terminal_state terminal_state job_info)
+      | Ok job_infos -> (
+          match job_infos with
+          | [] ->
+              let* () = Lwt_io.eprintf "Job not found\n" in
+              exit 1
+          | job_info :: _ -> (
+              let state = Slurm_rest.job_state_of_string job_info.job_state in
+              let* () = Lwt_io.printf "  State: %s\n" job_info.job_state in
+              let* () =
+                match job_info.exit_code with
+                | Some code -> Lwt_io.printf "  Exit code: %d\n" code
+                | None -> Lwt_io.printf "  Exit code: (not set)\n"
+              in
+              let* () =
+                match job_info.signal with
+                | Some sig_ -> Lwt_io.printf "  Signal: %d\n" sig_
+                | None -> Lwt_io.printf "  Signal: (not set)\n"
+              in
+              match state with
+              | Slurm_rest.Pending
+              | Slurm_rest.Running
+              | _
+                when state <> Slurm_rest.Completed && state <> Slurm_rest.Failed && state <> Slurm_rest.Cancelled && state <> Slurm_rest.Timeout ->
+                  let* () = Lwt_io.printf "  (waiting...)\n\n" in
+                  let* () = Lwt_unix.sleep 2.0 in
+                  poll (count + 1)
+              | terminal_state -> on_terminal_state terminal_state job_info))
   in
   poll 1
 

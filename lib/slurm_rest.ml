@@ -381,12 +381,8 @@ let get_job config job_id =
         let json = Yojson.Safe.from_string body_str in
         let open Yojson.Safe.Util in
         let jobs = json |> member "jobs" |> to_list in
-        match jobs with
-        | [] -> Lwt.return (Error (`Msg "Job not found"))
-        | job_json :: _ -> (
-            match parse_job_info job_json with
-            | Some job_info -> Lwt.return (Ok job_info)
-            | None -> Lwt.return (Error (`Msg "Failed to parse job info")))
+        let job_infos = List.filter_map parse_job_info jobs in
+        Lwt.return (Ok job_infos)
       with
       | exn ->
           Log.err (fun f -> f "Failed to parse job response: %s" (Printexc.to_string exn));
